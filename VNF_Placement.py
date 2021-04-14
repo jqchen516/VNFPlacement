@@ -8,6 +8,7 @@ import copy
 class VNFPlacement():
 
     def __init__(self, item, number_of_node, limit_W):
+        self.node_state = [[4, 5, 6, 7], [0, 1, 2, 3], [8, 9, 10, 11], [12, 13, 14, 15]]
         # 物品列表 dataframe
         self.item = item
         self.number_of_node = number_of_node
@@ -45,6 +46,36 @@ class VNFPlacement():
         else:
             return q_table
 
+    def gene_score(self, placement):
+        score = 0
+        count = 0
+        for index, node_stat in enumerate(placement):
+            count += len(node_stat)
+            cpu_usage = np.sum([self.item['cpu'][i] for i in node_stat]) / self.limit_W['cpu']
+            memory_usage = np.sum([self.item['memory'][i] for i in node_stat]) / self.limit_W['memory']
+            bw_usage = np.sum([self.item['BW'][i] for i in node_stat]) / self.limit_W['BW']
+            if cpu_usage > 1 or memory_usage > 1 or bw_usage > 1:
+                score = -99
+                done = "out of limit"
+                return done, score
+            node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
+            score += node_score
+
+            # TODO 遷移成本
+            move = 5 * len(set(node_stat).intersection(self.node_state[index]))
+            score += move
+
+            # if not node_stat:
+            #     score += 15
+        # 所有物品已放完
+        if count >= len(self.item):
+            score = score + 30
+            done = "finish"
+            return done, score
+
+        done = "continue"
+        return done, score
+
     def env_reward(self, action, placement):
         """
         執行action, 返回reward, 下一步的狀態及done
@@ -61,24 +92,9 @@ class VNFPlacement():
         placement_ = copy.deepcopy(placement)
         placement_[node] += [vnf]
         placement_[node].sort()
-        count = 0
-        for backpack in placement_:
-            count += len(backpack)
-            placement_weight = np.sum([self.item['Weight'][i] for i in backpack])
-            # 超過背包限制
-            if placement_weight > self.limit_W:
-                r = -99
-                done = "out of limit"
-                return r, placement_, done
-        # 所有物品已放完
-        if count >= len(self.item):
-            r = self.item['Value'][vnf]
-            done = "finish"
-            return r, placement_, done
+        done, reward = self.gene_score(placement_)
 
-        r = self.item['Value'][vnf]
-        done = "continue"
-        return r, placement_, done
+        return reward, placement_, done
 
     def mu_policy(self, q_table, epsilon, nA, observation, actions):
         """
@@ -198,9 +214,15 @@ class VNFPlacement():
             reward, next_knapsack, done = self.env_reward(action, knapsack)
 
             if done == "continue":
+                p = self.pi_policy(next_knapsack)
                 # 選擇下一步動作
-                next_action = np.random.choice(number_of_actions,
-                                               p=self.pi_policy(next_knapsack))
+                try:
+                    next_action = np.random.choice(number_of_actions,
+                                                   p=p)
+                except:
+                    print(number_of_actions)
+                    print(p)
+
                 # 未結束放置, 更新放置狀態及動作
                 action = next_action
                 knapsack = next_knapsack
@@ -216,10 +238,17 @@ class VNFPlacement():
 
 if __name__ == "__main__":
     item_list = [[28, 7], [6, 2], [18, 5], [22, 6], [1, 1]]
-    item = pd.DataFrame(data=item_list, columns=['Value', 'Weight'])
-    vnf_placement = VNFPlacement(item=item, number_of_node=2, limit_W=6)
+    item_list = [[2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100],
+                 [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100]]
+    item = pd.DataFrame(data=item_list, columns=['cpu', 'memory', 'BW'])
+    node_resource = {
+        'cpu': 8,
+        'memory': 16,
+        'BW': 1000
+    }
+    vnf_placement = VNFPlacement(item=item, number_of_node=4, limit_W=node_resource)
     train_start_time = time()
-    Q = vnf_placement.q_learning(num_episodes=1000, discount_factor=0.9, alpha=0.3, epsilon=0.1)
+    Q = vnf_placement.q_learning(num_episodes=1000, discount_factor=0.9, alpha=0.3, epsilon=0.25)
     train_finish_time = time()
     print("==============training time==========")
     print(train_finish_time - train_start_time)
@@ -233,4 +262,3 @@ if __name__ == "__main__":
     print(get_result_finish_time - get_result_start_time)
     print("==============result==========")
     print(vnf_placement_result)
-
