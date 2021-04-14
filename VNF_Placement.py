@@ -68,16 +68,16 @@ class VNFPlacement():
             # 超過背包限制
             if placement_weight > self.limit_W:
                 r = -99
-                done = True
+                done = "out of limit"
                 return r, placement_, done
         # 所有物品已放完
         if count >= len(self.item):
-            r = 100
-            done = True
+            r = self.item['Value'][vnf]
+            done = "finish"
             return r, placement_, done
 
         r = self.item['Value'][vnf]
-        done = False
+        done = "continue"
         return r, placement_, done
 
     def mu_policy(self, q_table, epsilon, nA, observation, actions):
@@ -137,8 +137,12 @@ class VNFPlacement():
                 action_index_name = (node, vnf)
                 # 執行action, 返回reward, 下一步的狀態及是否完成(超過背包限制或所有物品已放完)
                 reward, next_placement, done = self.env_reward(action, placement)
-                if done:
-                    self.q_table.loc[str(placement)][action_index_name] = reward
+                if done != "continue":
+                    self.q_table.loc[str(placement)][action_index_name] = \
+                        self.q_table.loc[str(placement)][action_index_name] + \
+                        alpha * (reward +
+                                 discount_factor * 100 -
+                                 self.q_table.loc[str(placement)][action_index_name])
                     break
                 self.q_table = self.check_state(self.q_table, next_placement, self.actions)
                 self.q_table.loc[str(placement)][action_index_name] = \
@@ -192,36 +196,35 @@ class VNFPlacement():
             actions_list.append(action)
             # 執行action, 返回reward, 下一步的狀態及是否完成(超過背包限制或所有物品已放完)
             reward, next_knapsack, done = self.env_reward(action, knapsack)
-            if len(self.pi_policy(next_knapsack)) == 0:
-                # 所有物品放完
-                knapsack = next_knapsack
-                break
-            else:
+
+            if done == "continue":
                 # 選擇下一步動作
                 next_action = np.random.choice(number_of_actions,
                                                p=self.pi_policy(next_knapsack))
-                if done:
-                    # 物品超過背包限制
-                    actions_list.pop()
-                    break
-                else:
-                    # 未結束放置, 更新放置狀態及動作
-                    action = next_action
-                    knapsack = next_knapsack
+                # 未結束放置, 更新放置狀態及動作
+                action = next_action
+                knapsack = next_knapsack
+            elif done == "out of limit":
+                print(done)
+                break
+            else:
+                knapsack = next_knapsack
+                break
 
         return knapsack
 
 
 if __name__ == "__main__":
-    item_list = [[1, 1], [6, 2], [18, 5], [22, 6], [28, 7], [20, 4], [29, 7], [40, 11]]
+    item_list = [[28, 7], [6, 2], [18, 5], [22, 6], [1, 1]]
     item = pd.DataFrame(data=item_list, columns=['Value', 'Weight'])
-    vnf_placement = VNFPlacement(item=item, number_of_node=6, limit_W=11)
+    vnf_placement = VNFPlacement(item=item, number_of_node=2, limit_W=6)
     train_start_time = time()
     Q = vnf_placement.q_learning(num_episodes=1000, discount_factor=0.9, alpha=0.3, epsilon=0.1)
     train_finish_time = time()
     print("==============training time==========")
     print(train_finish_time - train_start_time)
     print("==============Q table================")
+    print(Q)
 
     get_result_start_time = time()
     vnf_placement_result = vnf_placement.get_vnf_placement()
