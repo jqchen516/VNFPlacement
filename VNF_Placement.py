@@ -46,7 +46,7 @@ class VNFPlacement():
         else:
             return q_table
 
-    def gene_score(self, placement):
+    def gen_score(self, placement):
         score = 0
         count = 0
         for index, node_stat in enumerate(placement):
@@ -92,7 +92,7 @@ class VNFPlacement():
         placement_ = copy.deepcopy(placement)
         placement_[node] += [vnf]
         placement_[node].sort()
-        done, reward = self.gene_score(placement_)
+        done, reward = self.gen_score(placement_)
 
         return reward, placement_, done
 
