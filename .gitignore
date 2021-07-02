@@ -4,4 +4,8 @@
 #vscode
 .vscode/
 
+#macos
+.DS_Store
 
+#experiment result
+experiment_data/

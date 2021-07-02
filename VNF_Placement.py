@@ -3,12 +3,13 @@ import numpy as np
 from time import time
 import itertools
 import copy
+import matplotlib.pyplot as plt
 
 
 class VNFPlacement():
 
     def __init__(self, item, number_of_node, limit_W):
-        self.node_state = [[4, 5, 6, 7], [0, 1, 2, 3], [8, 9, 10, 11], [12, 13, 14, 15]]
+        # self.node_state = [[0, 1, 3], [2, 4, 6, 7], [5, 8, 9, 10]]
         # 物品列表 dataframe
         self.item = item
         self.number_of_node = number_of_node
@@ -58,21 +59,43 @@ class VNFPlacement():
                 score = -99
                 done = "out of limit"
                 return done, score
-            node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
-            score += node_score
 
-            # TODO 遷移成本
-            move = 5 * len(set(node_stat).intersection(self.node_state[index]))
-            score += move
+            # node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
 
-            # if not node_stat:
-            #     score += 15
+            # cpu_score = self.limit_W['cpu'] - np.sum([self.item['cpu'][i] for i in node_stat])
+            # memory_score = self.limit_W['memory'] - np.sum([self.item['memory'][i] for i in node_stat])
+            # node_score = cpu_score + memory_score
+            # score += node_score
+
         # 所有物品已放完
         if count >= len(self.item):
-            score = score + 30
+            for index, node_stat in enumerate(placement):
+                cpu_usage = np.sum([self.item['cpu'][i] for i in node_stat]) / self.limit_W['cpu']
+                memory_usage = np.sum([self.item['memory'][i] for i in node_stat]) / self.limit_W['memory']
+                bw_usage = np.sum([self.item['BW'][i] for i in node_stat]) / self.limit_W['BW']
+                if cpu_usage > 1 or memory_usage > 1 or bw_usage > 1:
+                    score = -99
+                    done = "out of limit"
+                    return done, score
+                node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
+
+                # cpu_score = self.limit_W['cpu'] - np.sum([self.item['cpu'][i] for i in node_stat])
+                # memory_score = self.limit_W['memory'] - np.sum([self.item['memory'][i] for i in node_stat])
+                # node_score = cpu_score + memory_score
+                score += node_score
+
+                # TODO 遷移成本
+                # move = len(set(node_stat).intersection(self.node_state[index]))
+                # move = len(self.node_state[index]) - len(set(node_stat).intersection(self.node_state[index]))
+                # score += (10 * move)
+
+                # 運行節點
+                if len(node_stat) == 0:
+                    score += 10
+            # score = 500 - score
             done = "finish"
             return done, score
-
+        score = 10 * count
         done = "continue"
         return done, score
 
@@ -132,6 +155,11 @@ class VNFPlacement():
     def q_learning(self, num_episodes, discount_factor=1.0, alpha=0.7, epsilon=0.2):
         number_of_actions = len(self.actions)
 
+        stats = {'episode_lengths': np.zeros(num_episodes + 1),
+                 'episode_rewards': np.zeros(num_episodes + 1),
+                 'final': np.zeros(num_episodes + 1),
+                 'placement': []}
+
         for i_episode in range(1, num_episodes + 1):
             # 開始一輪迭代
             # 開始時背包是空的
@@ -153,7 +181,22 @@ class VNFPlacement():
                 action_index_name = (node, vnf)
                 # 執行action, 返回reward, 下一步的狀態及是否完成(超過背包限制或所有物品已放完)
                 reward, next_placement, done = self.env_reward(action, placement)
+
+                # if done == "continue" and done == "finish":
+                stats['episode_rewards'][i_episode] += reward  # 计算累计奖励
+                stats['episode_lengths'][i_episode] = t  # 查看每一轮的时间
                 if done != "continue":
+                    # stats['final'][i_episode] = 145
+                    if done == "finish":
+                        # stats['final'].append(self.q_table.loc[str(placement)][action_index_name] + \
+                        #                       alpha * (reward +
+                        #                                discount_factor * 100 -
+                        #                                self.q_table.loc[str(placement)][action_index_name]))
+                        stats['final'][i_episode] = self.q_table.loc[str(placement)][action_index_name] + \
+                                              alpha * (reward +
+                                                       discount_factor * 100 -
+                                                       self.q_table.loc[str(placement)][action_index_name])
+                        stats['placement'].append(next_placement)
                     self.q_table.loc[str(placement)][action_index_name] = \
                         self.q_table.loc[str(placement)][action_index_name] + \
                         alpha * (reward +
@@ -175,10 +218,10 @@ class VNFPlacement():
                                                                 next_placement,
                                                                 self.actions))
                 action = next_action
-            if i_episode % 50 == 0:
+            if i_episode % 500 == 0:
                 print("\rEpisode {}/{}. | ".format(i_episode, num_episodes), end="")
         print("\n")
-        return self.q_table
+        return self.q_table, stats
 
     def pi_policy(self, observation):
         """
@@ -192,11 +235,15 @@ class VNFPlacement():
             # 選擇目前狀態下累計獎勵最高的動作, 轉為(node, vnf)格式
             action_values = self.q_table.loc[str(observation), :]
             best_action = action_values.idxmax()
-            node, vnf = best_action
+            best_action_score = action_values.max()
+            if isinstance(best_action, str):
+                best_action = best_action[1:-1]
+                best_action = tuple(map(int, best_action.split(', ')))
+            (node, vnf) = best_action
             action = (node * len(self.item)) + vnf
-            return np.eye(len(action_values))[action]
+            return np.eye(len(action_values))[action], best_action_score
         except KeyError:
-            return []
+            return [], 0
 
     def get_vnf_placement(self):
         # 開始時背包是空的
@@ -204,21 +251,27 @@ class VNFPlacement():
         number_of_actions = len(self.actions)
         actions_list = []
 
-        # 從實際執行的policy中選擇action
-        action = np.random.choice(number_of_actions,
-                                  p=self.pi_policy(knapsack))
+        self.actions = list()
+        for place in range(self.number_of_node):
+            self.actions = self.actions + [(place, item) for item in list(range(len(self.item)))]
 
+        # 從實際執行的policy中選擇action
+        p, best_action = self.pi_policy(knapsack)
+        action = np.random.choice(number_of_actions,
+                                  p=p)
+        final_score = 0
         for t in itertools.count():
             actions_list.append(action)
             # 執行action, 返回reward, 下一步的狀態及是否完成(超過背包限制或所有物品已放完)
             reward, next_knapsack, done = self.env_reward(action, knapsack)
 
             if done == "continue":
-                p = self.pi_policy(next_knapsack)
+                p, best_action = self.pi_policy(next_knapsack)
                 # 選擇下一步動作
                 try:
                     next_action = np.random.choice(number_of_actions,
                                                    p=p)
+                    final_score = best_action
                 except:
                     print(number_of_actions)
                     print(p)
@@ -233,32 +286,153 @@ class VNFPlacement():
                 knapsack = next_knapsack
                 break
 
-        return knapsack
+        return knapsack, final_score, done
 
 
-if __name__ == "__main__":
-    item_list = [[28, 7], [6, 2], [18, 5], [22, 6], [1, 1]]
-    item_list = [[2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100],
-                 [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100], [2, 4, 100]]
-    item = pd.DataFrame(data=item_list, columns=['cpu', 'memory', 'BW'])
+def experiment(num_episodes, discount_factor, alpha, epsilon, filename):
+    vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+                         [2, 6, 100], [3, 4, 100], [2, 4, 100],
+                         [1, 1, 100], [2, 1, 100], [2, 2, 100],
+                         [2, 2, 100], [1, 6, 100]]
+    # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+    #                      [2, 6, 100], [3, 4, 100], [2, 4, 100]]
+
+    item = pd.DataFrame(data=vnf_resource_list, columns=['cpu', 'memory', 'BW'])
     node_resource = {
         'cpu': 8,
         'memory': 16,
         'BW': 1000
     }
-    vnf_placement = VNFPlacement(item=item, number_of_node=4, limit_W=node_resource)
+
+    vnf_placement = VNFPlacement(item=item, number_of_node=5, limit_W=node_resource)
     train_start_time = time()
-    Q = vnf_placement.q_learning(num_episodes=1000, discount_factor=0.9, alpha=0.3, epsilon=0.25)
+    Q, stats = vnf_placement.q_learning(num_episodes=num_episodes,
+                                        discount_factor=discount_factor,
+                                        alpha=alpha,
+                                        epsilon=epsilon)
+
     train_finish_time = time()
-    print("==============training time==========")
-    print(train_finish_time - train_start_time)
-    print("==============Q table================")
-    print(Q)
+    # print("==============training time==========")
+    training_time = train_finish_time - train_start_time
+    # print(training_time)
+    # print("==============Q table================")
+    # print(Q)
 
     get_result_start_time = time()
-    vnf_placement_result = vnf_placement.get_vnf_placement()
+    vnf_placement_result, final_score, done = vnf_placement.get_vnf_placement()
+    get_result_finish_time = time()
+    # print("==============result time==========")
+    inference_time = get_result_finish_time - get_result_start_time
+    # print(inference_time)
+    # print("==============result==========")
+    # print(vnf_placement_result)
+    # print(final_score)
+    done, placement_score = vnf_placement.gen_score(vnf_placement_result)
+    with open('/Users/chenjianqun//Downloads/rl/experiment1_results/{filename}'.format(filename=filename), 'a') as f:
+        f.write(str(training_time) + ', ' + str(inference_time) + ', ' + str(final_score) + ',' + str(
+            vnf_placement_result) + ',' + str(placement_score) + ',' + done + '\n')
+
+
+def experiment_debug(num_episodes, discount_factor, alpha, epsilon):
+    # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+    #                      [2, 6, 100], [3, 4, 100], [2, 4, 100],
+    #                      [1, 1, 100], [2, 1, 100], [2, 2, 100],
+    #                      [2, 2, 100], [1, 6, 100]]
+
+    vnf_resource_list = [[0.2, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.4, 10], [0.1, 0.2, 10], [0.1, 0.2, 10],
+                         [0.2, 0.4, 10], [0.1, 0.3, 10], [0.1, 0.3, 10], [0.1, 0.1, 10], [0.2, 0.3, 10],
+                         [0.1, 0.2, 10], [0.2, 0.4, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.2, 10],
+                         [0.2, 0.3, 10], [0.1, 0.4, 10], [0.1, 0.1, 10], [0.1, 0.4, 10], [0.1, 0.1, 10],
+                         [0.1, 0.4, 10], [0.1, 0.4, 10], [0.1, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.2, 10],
+                         [0.2, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.4, 10],
+                         [0.1, 0.2, 10], [0.2, 0.4, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.2, 10],
+                         [0.2, 0.3, 10], [0.1, 0.4, 10], [0.1, 0.1, 10], [0.1, 0.4, 10], [0.1, 0.1, 10],
+                         [0.1, 0.4, 10], [0.1, 0.4, 10], [0.1, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.2, 10],
+                         [0.2, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.4, 10]]
+
+    # vnf_resource_list = [[0.6, 0.8, 10], [0.5, 0.8, 10], [0.6, 0.8, 10], [0.6, 1, 10], [0.5, 0.9, 10],
+    #                      [0.6, 1, 10], [0.6, 0.8, 10], [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10],
+    #                      [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.5, 0.9, 10],
+    #                      [0.5, 0.9, 10], [0.6, 1, 10], [0.6, 0.8, 10], [0.5, 0.8, 10], [0.5, 1, 10],
+    #                      [0.5, 1, 10], [0.6, 0.8, 10], [0.5, 1, 10], [0.5, 0.8, 10], [0.6, 0.8, 10],
+    #                      [0.5, 0.9, 10], [0.5, 1, 10], [0.5, 0.9, 10], [0.5, 0.9, 10], [0.6, 0.9, 10],
+    #                      [0.5, 1, 10], [0.5, 0.9, 10], [0.5, 0.9, 10], [0.6, 1, 10], [0.5, 1, 10],
+    #                      [0.5, 0.8, 10], [0.6, 1, 10], [0.5, 0.8, 10], [0.6, 1, 10], [0.5, 1, 10],
+    #                      [0.5, 1, 10], [0.6, 0.8, 10], [0.6, 0.9, 10], [0.6, 1, 10], [0.6, 0.8, 10],
+    #                      [0.6, 0.9, 10], [0.5, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.5, 0.9, 10]]
+
+    item = pd.DataFrame(data=vnf_resource_list, columns=['cpu', 'memory', 'BW'])
+    node_resource = {
+        'cpu': 8,
+        'memory': 16,
+        'BW': 1000
+    }
+
+    vnf_placement = VNFPlacement(item=item, number_of_node=6, limit_W=node_resource)
+    train_start_time = time()
+    Q, stats = vnf_placement.q_learning(num_episodes=num_episodes,
+                                        discount_factor=discount_factor,
+                                        alpha=alpha,
+                                        epsilon=epsilon)
+
+    train_finish_time = time()
+    print("==============training time==========")
+    training_time = train_finish_time - train_start_time
+    print(training_time)
+    print("==============Q table================")
+    print(Q)
+    Q.to_csv("q_table.csv")
+
+
+    get_result_start_time = time()
+    vnf_placement_result, final_score, done = vnf_placement.get_vnf_placement()
     get_result_finish_time = time()
     print("==============result time==========")
-    print(get_result_finish_time - get_result_start_time)
+    inference_time = get_result_finish_time - get_result_start_time
+    print(inference_time)
     print("==============result==========")
     print(vnf_placement_result)
+    print(final_score)
+    print(done)
+    done, placement_score = vnf_placement.gen_score(vnf_placement_result)
+    print(placement_score)
+    # print(stats)
+    plt.plot(stats['final'])
+    plt.show()
+
+
+if __name__ == "__main__":
+    # FILE_NAME = '5nodetest.csv'
+    # with open('/Users/chenjianqun//Downloads/rl/experiment1_results/{filename}'.format(filename=FILE_NAME), 'w') as f:
+    #     f.write("training_time, inference_time, final_score, placement, placement_score, state\n")
+    # for i in range(20):
+    #     experiment(num_episodes=1000, discount_factor=0.9, alpha=0.1, epsilon=0.05, filename=FILE_NAME)
+    #     print("\rEpisode {}/{}. | ".format(i, 1000), end="")
+
+    experiment_debug(num_episodes=5000, discount_factor=0.7, alpha=0.5, epsilon=0.1)
+
+    # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+    #                      [2, 6, 100], [3, 4, 100], [2, 4, 100],
+    #                      [1, 1, 100], [2, 1, 100], [2, 2, 100],
+    #                      [2, 2, 100], [1, 6, 100]]
+    # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+    #                      [2, 6, 100], [3, 4, 100], [2, 4, 100],
+    #                      [1, 1, 100], [2, 1, 100]]
+    # item = pd.DataFrame(data=vnf_resource_list, columns=['cpu', 'memory', 'BW'])
+    # node_resource = {
+    #     'cpu': 8,
+    #     'memory': 16,
+    #     'BW': 1000
+    # }
+    #
+    # a = VNFPlacement(item=item, number_of_node=4, limit_W=node_resource)
+    # q_table = pd.read_csv("q_table.csv", index_col=[0])
+    # a.q_table = q_table
+    # print(q_table)
+    # # actions = list()
+    # # for place in range(4):
+    # #     actions = actions + [(place, item) for item in list(range(len(item)))]
+    # # a.actions = actions
+    #
+    # vnf_placement_result, final_score, done = a.get_vnf_placement()
+    # print(vnf_placement_result, final_score, done)
