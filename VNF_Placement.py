@@ -60,29 +60,29 @@ class VNFPlacement():
                 done = "out of limit"
                 return done, score
 
-            # node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
+            node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
 
             # cpu_score = self.limit_W['cpu'] - np.sum([self.item['cpu'][i] for i in node_stat])
             # memory_score = self.limit_W['memory'] - np.sum([self.item['memory'][i] for i in node_stat])
             # node_score = cpu_score + memory_score
-            # score += node_score
+            score += node_score
 
         # 所有物品已放完
         if count >= len(self.item):
             for index, node_stat in enumerate(placement):
-                cpu_usage = np.sum([self.item['cpu'][i] for i in node_stat]) / self.limit_W['cpu']
-                memory_usage = np.sum([self.item['memory'][i] for i in node_stat]) / self.limit_W['memory']
-                bw_usage = np.sum([self.item['BW'][i] for i in node_stat]) / self.limit_W['BW']
-                if cpu_usage > 1 or memory_usage > 1 or bw_usage > 1:
-                    score = -99
-                    done = "out of limit"
-                    return done, score
-                node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
+                # cpu_usage = np.sum([self.item['cpu'][i] for i in node_stat]) / self.limit_W['cpu']
+                # memory_usage = np.sum([self.item['memory'][i] for i in node_stat]) / self.limit_W['memory']
+                # bw_usage = np.sum([self.item['BW'][i] for i in node_stat]) / self.limit_W['BW']
+                # if cpu_usage > 1 or memory_usage > 1 or bw_usage > 1:
+                #     score = -99
+                #     done = "out of limit"
+                #     return done, score
+                # node_score = int(cpu_usage * 10) + int(memory_usage * 10) + int(bw_usage * 10)
 
                 # cpu_score = self.limit_W['cpu'] - np.sum([self.item['cpu'][i] for i in node_stat])
                 # memory_score = self.limit_W['memory'] - np.sum([self.item['memory'][i] for i in node_stat])
                 # node_score = cpu_score + memory_score
-                score += node_score
+                # score += node_score
 
                 # TODO 遷移成本
                 # move = len(set(node_stat).intersection(self.node_state[index]))
@@ -92,10 +92,9 @@ class VNFPlacement():
                 # 運行節點
                 if len(node_stat) == 0:
                     score += 10
-            # score = 500 - score
             done = "finish"
             return done, score
-        score = 10 * count
+        # score = 50 * count
         done = "continue"
         return done, score
 
@@ -157,7 +156,8 @@ class VNFPlacement():
 
         stats = {'episode_lengths': np.zeros(num_episodes + 1),
                  'episode_rewards': np.zeros(num_episodes + 1),
-                 'final': np.zeros(num_episodes + 1),
+                 'final': [],
+                 'total': [],
                  'placement': []}
 
         for i_episode in range(1, num_episodes + 1):
@@ -192,10 +192,11 @@ class VNFPlacement():
                         #                       alpha * (reward +
                         #                                discount_factor * 100 -
                         #                                self.q_table.loc[str(placement)][action_index_name]))
-                        stats['final'][i_episode] = self.q_table.loc[str(placement)][action_index_name] + \
+                        stats['final'].append(self.q_table.loc[str(placement)][action_index_name] + \
                                               alpha * (reward +
                                                        discount_factor * 100 -
-                                                       self.q_table.loc[str(placement)][action_index_name])
+                                                       self.q_table.loc[str(placement)][action_index_name]))
+                        stats['total'].append(stats['episode_rewards'][i_episode])
                         stats['placement'].append(next_placement)
                     self.q_table.loc[str(placement)][action_index_name] = \
                         self.q_table.loc[str(placement)][action_index_name] + \
@@ -334,32 +335,45 @@ def experiment(num_episodes, discount_factor, alpha, epsilon, filename):
 
 
 def experiment_debug(num_episodes, discount_factor, alpha, epsilon):
-    # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
-    #                      [2, 6, 100], [3, 4, 100], [2, 4, 100],
-    #                      [1, 1, 100], [2, 1, 100], [2, 2, 100],
-    #                      [2, 2, 100], [1, 6, 100]]
+    vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
+                         [2, 6, 100], [3, 4, 100], [2, 4, 100],
+                         [1, 1, 100], [2, 1, 100], [2, 2, 100],
+                         [2, 2, 100], [1, 6, 100]]
 
-    vnf_resource_list = [[0.2, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.4, 10], [0.1, 0.2, 10], [0.1, 0.2, 10],
-                         [0.2, 0.4, 10], [0.1, 0.3, 10], [0.1, 0.3, 10], [0.1, 0.1, 10], [0.2, 0.3, 10],
-                         [0.1, 0.2, 10], [0.2, 0.4, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.2, 10],
-                         [0.2, 0.3, 10], [0.1, 0.4, 10], [0.1, 0.1, 10], [0.1, 0.4, 10], [0.1, 0.1, 10],
-                         [0.1, 0.4, 10], [0.1, 0.4, 10], [0.1, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.2, 10],
-                         [0.2, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.4, 10],
-                         [0.1, 0.2, 10], [0.2, 0.4, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.2, 10],
-                         [0.2, 0.3, 10], [0.1, 0.4, 10], [0.1, 0.1, 10], [0.1, 0.4, 10], [0.1, 0.1, 10],
-                         [0.1, 0.4, 10], [0.1, 0.4, 10], [0.1, 0.4, 10], [0.2, 0.1, 10], [0.2, 0.2, 10],
-                         [0.2, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.3, 10], [0.2, 0.4, 10], [0.1, 0.4, 10]]
+    # vnf_resource_list = [[1, 2, 10], [2, 2, 10], [4, 1, 10], [5, 4, 10], [2, 5, 10],
+    #                      [2, 3, 10], [1, 4, 10], [5, 5, 10], [5, 2, 10], [4, 3, 10],
+    #                      [2, 1, 10], [4, 4, 10], [3, 3, 10], [3, 5, 10], [3, 4, 10],
+    #                      [4, 1, 10], [4, 1, 10], [1, 3, 10], [5, 1, 10], [4, 3, 10],
+    #                      [5, 5, 10], [3, 3, 10], [2, 3, 10], [2, 1, 10], [3, 1, 10],
+    #                      [3, 5, 10], [2, 2, 10], [5, 4, 10], [1, 4, 10], [3, 4, 10]]
 
-    # vnf_resource_list = [[0.6, 0.8, 10], [0.5, 0.8, 10], [0.6, 0.8, 10], [0.6, 1, 10], [0.5, 0.9, 10],
-    #                      [0.6, 1, 10], [0.6, 0.8, 10], [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10],
-    #                      [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.5, 0.9, 10],
-    #                      [0.5, 0.9, 10], [0.6, 1, 10], [0.6, 0.8, 10], [0.5, 0.8, 10], [0.5, 1, 10],
-    #                      [0.5, 1, 10], [0.6, 0.8, 10], [0.5, 1, 10], [0.5, 0.8, 10], [0.6, 0.8, 10],
-    #                      [0.5, 0.9, 10], [0.5, 1, 10], [0.5, 0.9, 10], [0.5, 0.9, 10], [0.6, 0.9, 10],
-    #                      [0.5, 1, 10], [0.5, 0.9, 10], [0.5, 0.9, 10], [0.6, 1, 10], [0.5, 1, 10],
-    #                      [0.5, 0.8, 10], [0.6, 1, 10], [0.5, 0.8, 10], [0.6, 1, 10], [0.5, 1, 10],
-    #                      [0.5, 1, 10], [0.6, 0.8, 10], [0.6, 0.9, 10], [0.6, 1, 10], [0.6, 0.8, 10],
-    #                      [0.6, 0.9, 10], [0.5, 1, 10], [0.6, 1, 10], [0.6, 1, 10], [0.5, 0.9, 10]]
+    # vnf_resource_list = [[1, 2, 10], [2, 2, 10], [4, 1, 10], [5, 4, 10], [2, 5, 10],
+    #                      [2, 3, 10], [1, 4, 10], [5, 5, 10], [5, 2, 10], [4, 3, 10],
+    #                      [2, 1, 10], [4, 4, 10], [3, 3, 10], [3, 5, 10], [3, 4, 10],
+    #                      [8, 9, 10], [9, 8, 10], [7, 7, 10], [8, 6, 10], [7, 6, 10],
+    #                      [6, 8, 10], [9, 6, 10], [7, 8, 10], [9, 9, 10], [6, 7, 10],
+    #                      [8, 6, 10], [8, 7, 10], [8, 6, 10], [6, 6, 10], [6, 7, 10]]
+
+    # vnf_resource_list = [[7, 9, 10], [9, 8, 10], [7, 7, 10], [9, 6, 10], [9, 6, 10],
+    #                      [8, 6, 10], [6, 8, 10], [7, 8, 10], [6, 6, 10], [8, 6, 10],
+    #                      [9, 6, 10], [6, 9, 10], [6, 7, 10], [6, 8, 10], [9, 8, 10],
+    #                      [8, 9, 10], [9, 8, 10], [7, 7, 10], [8, 6, 10], [7, 6, 10],
+    #                      [6, 8, 10], [9, 6, 10], [7, 8, 10], [9, 9, 10], [6, 7, 10],
+    #                      [8, 6, 10], [8, 7, 10], [8, 6, 10], [6, 6, 10], [6, 7, 10]]
+
+    # vnf_resource_list = [[8, 9, 10], [9, 8, 10], [7, 7, 10], [8, 6, 10], [7, 6, 10],
+    #                      [6, 8, 10], [9, 6, 10], [7, 8, 10], [9, 9, 10], [6, 7, 10],
+    #                      [8, 6, 10], [8, 7, 10], [8, 6, 10], [6, 6, 10], [6, 7, 10],
+    #                      [10, 20, 10], [10, 20, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10],
+    #                      [10, 10, 10], [10, 20, 10], [10, 10, 10], [10, 20, 10], [10, 10, 10],
+    #                      [10, 10, 10], [10, 10, 10], [10, 20, 10], [10, 10, 10], [10, 20, 10]]
+
+    # vnf_resource_list = [[10, 20, 10], [10, 20, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10],
+    #                      [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 20, 10],
+    #                      [10, 20, 10], [10, 10, 10], [10, 10, 10], [10, 20, 10], [10, 20, 10],
+    #                      [10, 20, 10], [10, 20, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10],
+    #                      [10, 10, 10], [10, 20, 10], [10, 10, 10], [10, 20, 10], [10, 10, 10],
+    #                      [10, 10, 10], [10, 10, 10], [10, 20, 10], [10, 10, 10], [10, 20, 10]]
 
     item = pd.DataFrame(data=vnf_resource_list, columns=['cpu', 'memory', 'BW'])
     node_resource = {
@@ -368,7 +382,7 @@ def experiment_debug(num_episodes, discount_factor, alpha, epsilon):
         'BW': 1000
     }
 
-    vnf_placement = VNFPlacement(item=item, number_of_node=6, limit_W=node_resource)
+    vnf_placement = VNFPlacement(item=item, number_of_node=5, limit_W=node_resource)
     train_start_time = time()
     Q, stats = vnf_placement.q_learning(num_episodes=num_episodes,
                                         discount_factor=discount_factor,
@@ -383,7 +397,6 @@ def experiment_debug(num_episodes, discount_factor, alpha, epsilon):
     print(Q)
     Q.to_csv("q_table.csv")
 
-
     get_result_start_time = time()
     vnf_placement_result, final_score, done = vnf_placement.get_vnf_placement()
     get_result_finish_time = time()
@@ -396,9 +409,17 @@ def experiment_debug(num_episodes, discount_factor, alpha, epsilon):
     print(done)
     done, placement_score = vnf_placement.gen_score(vnf_placement_result)
     print(placement_score)
-    # print(stats)
-    plt.plot(stats['final'])
-    plt.show()
+    # print(stats['final'])
+    reward = stats['final']
+    # reward = stats['total']
+    # a = list()
+    # for index, value in enumerate(reward):
+    #     if index % 3 == 0:
+    #         a.append(value)
+    print(reward)
+    print(len(reward))
+    # plt.plot(reward, linewidth=0.8)
+    # plt.show()
 
 
 if __name__ == "__main__":
@@ -409,7 +430,7 @@ if __name__ == "__main__":
     #     experiment(num_episodes=1000, discount_factor=0.9, alpha=0.1, epsilon=0.05, filename=FILE_NAME)
     #     print("\rEpisode {}/{}. | ".format(i, 1000), end="")
 
-    experiment_debug(num_episodes=5000, discount_factor=0.7, alpha=0.5, epsilon=0.1)
+    experiment_debug(num_episodes=10000, discount_factor=0.7, alpha=0.3, epsilon=0.4)
 
     # vnf_resource_list = [[4, 4, 100], [2, 4, 100], [1, 10, 100],
     #                      [2, 6, 100], [3, 4, 100], [2, 4, 100],
@@ -436,3 +457,23 @@ if __name__ == "__main__":
     #
     # vnf_placement_result, final_score, done = a.get_vnf_placement()
     # print(vnf_placement_result, final_score, done)
+son = {
+    "Nodes": [
+        {
+            "<node_name>": {
+                "CPU": "8",
+                "Memory": "16MB",
+                "Bandwidth": "1GB/s"
+            }
+        }
+    ],
+    "VNFs": [
+        {
+            "<vnf_id>": {
+                "CPU": "1",
+                "Memory": "1MB",
+                "Bandwidth": "100MB/s"
+            }
+        }
+    ]
+}

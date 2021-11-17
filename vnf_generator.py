@@ -17,24 +17,24 @@ class VNFGenerator(object):
 
     def gen_cpu(self):
         if self.flavor == self.large:
-            cpu = round(random.randint(5, 6) / 10, 1)
+            cpu = 10
         elif self.flavor == self.medium:
-            cpu = round(random.randint(3, 4) / 10, 1)
+            cpu = random.randint(6, 9)
         else:
-            cpu = round(random.randint(1, 2) / 10, 1)
+            cpu = random.randint(1, 5)
         return cpu
 
     def gen_mem(self):
         if self.flavor == self.large:
-            cpu = round(random.randint(8, 9) / 10, 1) if random.randint(1, 2) == 1 else 1
+            mem = 20 if random.randint(1, 2) == 1 else 10
         elif self.flavor == self.medium:
-            cpu = round(random.randint(5, 7) / 10, 1)
+            mem = random.randint(6, 9)
         else:
-            cpu = round(random.randint(1, 4) / 10, 1)
-        return cpu
+            mem = random.randint(1, 5)
+        return mem
 
 
 if __name__ == '__main__':
-    vnf_generator = VNFGenerator(50, 'large')
+    vnf_generator = VNFGenerator(30, 'large')
     a = vnf_generator.gen_vnf()
     print(a)
